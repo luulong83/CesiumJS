@@ -7,6 +7,7 @@ import ControlPanel from './components/ControlPanel';
 import ProductionDashboard from './components/ProductionDashboard';
 import CropCalendar from './components/CropCalendar';
 import TerrainDemo from './components/TerrainDemo';
+import FireRiskDemo from './components/FireRiskDemo';
 
 import {
   PLANTING_AREA_DATA,
@@ -49,6 +50,9 @@ function App() {
 
         // Slight vertical exaggeration to make terrain more visible
         viewer.scene.verticalExaggeration = 1.5;
+
+        // Enable depth test so entities sit properly on terrain
+        viewer.scene.globe.depthTestAgainstTerrain = true;
 
         // Fly to initial location (Vietnam)
         viewer.camera.flyTo({
@@ -335,6 +339,9 @@ function App() {
 
       {/* Terrain Demo Panel */}
       {activeMode === 'terrain' && <TerrainDemo viewer={viewerRef.current} />}
+
+      {/* Fire Risk Demo Panel */}
+      {activeMode === 'fire' && <FireRiskDemo viewer={viewerRef.current} />}
 
     </div>
   );

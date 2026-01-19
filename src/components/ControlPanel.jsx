@@ -7,6 +7,7 @@ const ControlPanel = ({ onModeChange, activeMode }) => {
         { id: 'production', label: '📊 Sản Xuất', icon: '🏭' },
         { id: 'calendar', label: '🕒 Mùa Vụ', icon: '📅' },
         { id: 'terrain', label: '⛰️ Demo Địa Hình', icon: '🌍' },
+        { id: 'fire', label: '🔥 Cảnh Báo Cháy', icon: '🚨' },
     ];
 
     return (
