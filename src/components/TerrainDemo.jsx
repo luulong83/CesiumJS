@@ -19,60 +19,68 @@ function TerrainDemo({ viewer }) {
     // 1. ELEVATION SAMPLING (Lấy độ cao tại 1 điểm)
     // ============================================
     const sampleElevation = async () => {
-        if (!viewer) return;
+        if (!viewer) {
+            console.error('Viewer not available');
+            return;
+        }
 
-        // Get center of current view
-        const center = viewer.camera.pickEllipsoid(
-            new Cesium.Cartesian2(
-                viewer.canvas.clientWidth / 2,
-                viewer.canvas.clientHeight / 2
-            )
-        );
+        try {
+            // Use camera's current cartographic position (more reliable)
+            const cameraPosition = viewer.camera.positionCartographic;
 
-        if (center) {
-            const cartographic = Cesium.Cartographic.fromCartesian(center);
-            const positions = [cartographic];
+            // Create a copy for sampling (don't modify original)
+            const samplePosition = new Cesium.Cartographic(
+                cameraPosition.longitude,
+                cameraPosition.latitude
+            );
 
-            try {
-                const updatedPositions = await Cesium.sampleTerrainMostDetailed(
-                    viewer.terrainProvider,
-                    positions
-                );
+            const positions = [samplePosition];
 
-                const heightMeters = updatedPositions[0].height;
-                setElevation(heightMeters ? heightMeters.toFixed(2) : 'N/A');
+            console.log('Sampling at:',
+                Cesium.Math.toDegrees(samplePosition.longitude).toFixed(4),
+                Cesium.Math.toDegrees(samplePosition.latitude).toFixed(4)
+            );
 
-                // Add a marker at sampled point
-                viewer.entities.add({
-                    position: Cesium.Cartesian3.fromRadians(
-                        cartographic.longitude,
-                        cartographic.latitude,
-                        heightMeters || 0
-                    ),
-                    point: {
-                        pixelSize: 15,
-                        color: Cesium.Color.YELLOW,
-                        outlineColor: Cesium.Color.BLACK,
-                        outlineWidth: 2,
-                        heightReference: Cesium.HeightReference.CLAMP_TO_GROUND
-                    },
-                    label: {
-                        text: `📍 ${heightMeters?.toFixed(1) || 0}m`,
-                        font: 'bold 16px sans-serif',
-                        fillColor: Cesium.Color.WHITE,
-                        outlineColor: Cesium.Color.BLACK,
-                        outlineWidth: 2,
-                        style: Cesium.LabelStyle.FILL_AND_OUTLINE,
-                        verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
-                        pixelOffset: new Cesium.Cartesian2(0, -20),
-                        heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
-                        disableDepthTestDistance: Number.POSITIVE_INFINITY
-                    }
-                });
-            } catch (error) {
-                console.error('Error sampling terrain:', error);
-                setElevation('Lỗi');
-            }
+            const updatedPositions = await Cesium.sampleTerrainMostDetailed(
+                viewer.terrainProvider,
+                positions
+            );
+
+            const heightMeters = updatedPositions[0].height;
+            const displayHeight = heightMeters !== undefined ? heightMeters.toFixed(2) : 'N/A';
+            setElevation(displayHeight);
+
+            console.log('Sampled elevation:', displayHeight, 'm');
+
+            // Add a marker at sampled point
+            const lon = Cesium.Math.toDegrees(samplePosition.longitude);
+            const lat = Cesium.Math.toDegrees(samplePosition.latitude);
+
+            viewer.entities.add({
+                position: Cesium.Cartesian3.fromDegrees(lon, lat, heightMeters || 0),
+                point: {
+                    pixelSize: 15,
+                    color: Cesium.Color.YELLOW,
+                    outlineColor: Cesium.Color.BLACK,
+                    outlineWidth: 2,
+                    heightReference: Cesium.HeightReference.CLAMP_TO_GROUND
+                },
+                label: {
+                    text: `📍 ${displayHeight}m\n(${lat.toFixed(4)}, ${lon.toFixed(4)})`,
+                    font: 'bold 14px sans-serif',
+                    fillColor: Cesium.Color.WHITE,
+                    outlineColor: Cesium.Color.BLACK,
+                    outlineWidth: 2,
+                    style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+                    verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+                    pixelOffset: new Cesium.Cartesian2(0, -20),
+                    heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+                    disableDepthTestDistance: Number.POSITIVE_INFINITY
+                }
+            });
+        } catch (error) {
+            console.error('Error sampling terrain:', error);
+            setElevation('Lỗi - ' + error.message);
         }
     };
 
