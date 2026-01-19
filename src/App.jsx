@@ -1,12 +1,26 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import * as Cesium from 'cesium';
 import "cesium/Build/Cesium/Widgets/widgets.css";
 import './App.css';
 
+import ControlPanel from './components/ControlPanel';
+import ProductionDashboard from './components/ProductionDashboard';
+import CropCalendar from './components/CropCalendar';
+import TerrainDemo from './components/TerrainDemo';
+
+import {
+  PLANTING_AREA_DATA,
+  ANALYSIS_ROUTE_DATA,
+  PRODUCTION_DATA,
+  CROP_CALENDAR_DATA
+} from './data/mockData';
+
 function App() {
   const cesiumContainer = useRef(null);
   const viewerRef = useRef(null);
+  const [activeMode, setActiveMode] = useState(null); // 'polygon', 'polyline', 'production', 'calendar'
 
+  // Initialize Cesium Viewer
   useEffect(() => {
     if (!cesiumContainer.current) return;
 
@@ -15,66 +29,35 @@ function App() {
 
     const initializeViewer = async () => {
       try {
-        // Create terrain provider
         const terrainProvider = await Cesium.createWorldTerrainAsync();
 
-        // Check if component is still mounted
         if (viewerRef.current) return;
 
-        // Initialize the Cesium Viewer
         const viewer = new Cesium.Viewer(cesiumContainer.current, {
           terrainProvider: terrainProvider,
           animation: false,
           timeline: false,
+          baseLayerPicker: true,
+          infoBox: false, // HELPFUL: Disable default InfoBox popup
+          selectionIndicator: false, // HELPFUL: Disable green selection box
         });
 
         viewerRef.current = viewer;
 
-        // GeoJSON Data
-        const geoJsonData = {
-          "type": "FeatureCollection",
-          "features": [
-            {
-              "type": "Feature",
-              "properties": {
-                "ProducerName": "Nhà máy cao su VNPT Green",
-                "Area": 2,
-                "ProductionPlace": "3cae1517-42ad-44a4-a",
-                "ProducerCountry": "VN"
-              },
-              "geometry": {
-                "type": "Polygon",
-                "coordinates": [[[106.69765401631595, 11.863362048467723], [106.69808149337769, 11.863410937575154], [106.69819951057433, 11.863700006548024], [106.69815391302109, 11.86403829232357], [106.69959258288145, 11.864231551419252], [106.69959258288145, 11.863337439853284], [106.69852908700705, 11.863193069270551], [106.6983564198017, 11.863050667302698], [106.69765636324881, 11.86301719954833]]]
-              }
-            },
-            {
-              "type": "Feature",
-              "properties": {
-                "ProducerName": "Nhà máy cao su VNPT Green",
-                "Area": 3,
-                "ProductionPlace": "cd44093d-b263-4679-a",
-                "ProducerCountry": "VN"
-              },
-              "geometry": {
-                "type": "Polygon",
-                "coordinates": [[[106.69787362217903, 11.865051178455808], [106.69798728078604, 11.865578127123115], [106.69825550168753, 11.865629312618099], [106.69828299432993, 11.866034202669427], [106.69878724962473, 11.865994173047694], [106.69878724962473, 11.865994173047694], [106.69907592236996, 11.866158885060113], [106.69911917299034, 11.866521448003834], [106.69935319572687, 11.866543431442835], [106.69906452298163, 11.864904183876314], [106.6985532268882, 11.864902215198384], [106.6984486207366, 11.865060037501586]]]
-              }
-            }
-          ]
-        };
+        // Enable terrain lighting for realistic shadows
+        viewer.scene.globe.enableLighting = true;
 
-        // Load GeoJSON
-        const dataSource = await Cesium.GeoJsonDataSource.load(geoJsonData, {
-          clampToGround: true,
-          stroke: Cesium.Color.BLACK,
-          fill: Cesium.Color.fromCssColorString('#D4E157').withAlpha(0.6), // Light Green
-          strokeWidth: 2
+        // Slight vertical exaggeration to make terrain more visible
+        viewer.scene.verticalExaggeration = 1.5;
+
+        // Fly to initial location (Vietnam)
+        viewer.camera.flyTo({
+          destination: Cesium.Cartesian3.fromDegrees(106.699, 11.864, 2000),
+          orientation: {
+            heading: Cesium.Math.toRadians(0.0),
+            pitch: Cesium.Math.toRadians(-45.0),
+          }
         });
-
-        viewer.dataSources.add(dataSource);
-
-        // Fly to the data
-        viewer.zoomTo(dataSource);
 
       } catch (error) {
         console.error("Error initializing Cesium:", error);
@@ -83,7 +66,6 @@ function App() {
 
     initializeViewer();
 
-    // Cleanup on component unmount
     return () => {
       if (viewerRef.current) {
         viewerRef.current.destroy();
@@ -92,25 +74,268 @@ function App() {
     };
   }, []);
 
-  const toggleSceneMode = () => {
-    if (!viewerRef.current) return;
+  // Handle Mode Switching and Data Visualization
+  useEffect(() => {
+    const viewer = viewerRef.current;
+    if (!viewer) return;
 
-    const scene = viewerRef.current.scene;
-    if (scene.mode === Cesium.SceneMode.SCENE3D) {
-      scene.morphTo2D();
-    } else {
-      scene.morphTo3D();
-    }
-  };
+    const updateVisualization = async () => {
+      // Clear previous data sources/entities
+      viewer.dataSources.removeAll();
+      viewer.entities.removeAll();
+
+      try {
+        if (activeMode === 'polygon') {
+          const dataSource = await Cesium.GeoJsonDataSource.load(PLANTING_AREA_DATA, {
+            clampToGround: true,
+            stroke: Cesium.Color.BLACK,
+            fill: Cesium.Color.fromCssColorString('#4CAF50').withAlpha(0.6),
+            strokeWidth: 2
+          });
+
+          // Add labels to polygons
+          const entities = dataSource.entities.values;
+          for (let i = 0; i < entities.length; i++) {
+            const entity = entities[i];
+            if (entity.polygon) {
+              // Get properties
+              const props = entity.properties;
+              const producerName = props.ProducerName?.getValue();
+              const area = props.Area?.getValue() || props.AreaHa?.getValue();
+              const cropType = props.CropType?.getValue();
+
+              // Format label text - Include Area to distinguish zones
+              let labelText = `${producerName || 'N/A'}\n(Lô: ${area} ha)`;
+
+              // Calculate polygon center for label position
+              const positions = entity.polygon.hierarchy.getValue(Cesium.JulianDate.now()).positions;
+              let centerX = 0, centerY = 0, centerZ = 0;
+              for (let j = 0; j < positions.length; j++) {
+                centerX += positions[j].x;
+                centerY += positions[j].y;
+                centerZ += positions[j].z;
+              }
+              const centerPosition = new Cesium.Cartesian3(
+                centerX / positions.length,
+                centerY / positions.length,
+                centerZ / positions.length
+              );
+
+              // Set position for label
+              entity.position = centerPosition;
+
+              entity.label = new Cesium.LabelGraphics({
+                text: labelText,
+                font: 'bold 20px sans-serif', // Bolder and larger
+                fillColor: Cesium.Color.RED,   // Red Interior
+                outlineColor: Cesium.Color.WHITE, // White Outline
+                outlineWidth: 4,               // Thick outline
+                showBackground: false,         // Remove background box as per image
+                style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+                verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+                pixelOffset: new Cesium.Cartesian2(0, -10),
+                heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+                distanceDisplayCondition: new Cesium.DistanceDisplayCondition(0.0, 50000.0),
+                disableDepthTestDistance: Number.POSITIVE_INFINITY
+              });
+            }
+          }
+
+          viewer.dataSources.add(dataSource);
+          viewer.zoomTo(dataSource);
+        }
+        else if (activeMode === 'polyline') {
+          const dataSource = await Cesium.GeoJsonDataSource.load(ANALYSIS_ROUTE_DATA, {
+            clampToGround: true,
+          });
+          // Customize styling for polylines manually if GeoJsonDataSource simple styling isn't enough
+          // But simple styling is often easier:
+          const entities = dataSource.entities.values;
+          for (let i = 0; i < entities.length; i++) {
+            const entity = entities[i];
+            if (entity.polyline) {
+              entity.polyline.material = new Cesium.PolylineDashMaterialProperty({
+                color: Cesium.Color.ORANGE,
+                dashLength: 16.0
+              });
+              entity.polyline.width = 4;
+              entity.polyline.clampToGround = true;
+
+              // Add Label
+              const name = entity.properties.Name?.getValue();
+              if (name) {
+                entity.label = new Cesium.LabelGraphics({
+                  text: name,
+                  font: '14px sans-serif',
+                  fillColor: Cesium.Color.YELLOW,
+                  outlineColor: Cesium.Color.BLACK,
+                  outlineWidth: 2,
+                  showBackground: true,
+                  backgroundColor: new Cesium.Color(0.1, 0.1, 0.1, 0.7),
+                  style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+                  verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+                  pixelOffset: new Cesium.Cartesian2(0, -10),
+                  heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+                  disableDepthTestDistance: Number.POSITIVE_INFINITY
+                });
+              }
+            }
+          }
+          viewer.dataSources.add(dataSource);
+          viewer.zoomTo(dataSource);
+        }
+        else if (activeMode === 'production') {
+          // Load Polygon to attach label to
+          const dataSource = await Cesium.GeoJsonDataSource.load(PLANTING_AREA_DATA, {
+            clampToGround: true,
+            stroke: Cesium.Color.BLACK,
+            fill: Cesium.Color.fromCssColorString('#4CAF50').withAlpha(0.2), // Lighter fill to focus on text
+            strokeWidth: 2
+          });
+
+          const entities = dataSource.entities.values;
+          for (let i = 0; i < entities.length; i++) {
+            const entity = entities[i];
+            if (entity.polygon) {
+              const producerName = entity.properties.ProducerName?.getValue();
+
+              // Calculate polygon center for label position
+              const positions = entity.polygon.hierarchy.getValue(Cesium.JulianDate.now()).positions;
+              let centerX = 0, centerY = 0, centerZ = 0;
+              for (let j = 0; j < positions.length; j++) {
+                centerX += positions[j].x;
+                centerY += positions[j].y;
+                centerZ += positions[j].z;
+              }
+              entity.position = new Cesium.Cartesian3(
+                centerX / positions.length,
+                centerY / positions.length,
+                centerZ / positions.length
+              );
+
+              // Create Production Table String
+              let labelText = `📊 SẢN XUẤT: ${producerName}\n====================\n`;
+              const stats = PRODUCTION_DATA.filter(p => p.ProducerName === producerName);
+
+              if (stats.length > 0) {
+                stats.forEach(s => {
+                  labelText += `Năm ${s.Year}: ${s.YieldTon} tấn | ${s.WaterUsage} m³ nước\n`;
+                });
+              } else {
+                labelText += "Không có dữ liệu sản xuất";
+              }
+
+              entity.label = new Cesium.LabelGraphics({
+                text: labelText,
+                font: '16px monospace', // Monospace for alignment
+                fillColor: Cesium.Color.WHITE,
+                outlineColor: Cesium.Color.BLACK,
+                outlineWidth: 3,
+                showBackground: true,
+                backgroundColor: new Cesium.Color(0.0, 0.0, 0.2, 0.8),
+                style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+                verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+                pixelOffset: new Cesium.Cartesian2(0, -20),
+                heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+                disableDepthTestDistance: Number.POSITIVE_INFINITY
+              });
+            }
+          }
+          viewer.dataSources.add(dataSource);
+          viewer.zoomTo(dataSource);
+        }
+        else if (activeMode === 'calendar') {
+          // Load Polygon to attach label to
+          const dataSource = await Cesium.GeoJsonDataSource.load(PLANTING_AREA_DATA, {
+            clampToGround: true,
+            stroke: Cesium.Color.BLACK,
+            fill: Cesium.Color.fromCssColorString('#FF9800').withAlpha(0.2),
+            strokeWidth: 2
+          });
+
+          const entities = dataSource.entities.values;
+          for (let i = 0; i < entities.length; i++) {
+            const entity = entities[i];
+            if (entity.polygon) {
+              const producerName = entity.properties.ProducerName?.getValue();
+
+              // Calculate polygon center for label position
+              const positions = entity.polygon.hierarchy.getValue(Cesium.JulianDate.now()).positions;
+              let centerX = 0, centerY = 0, centerZ = 0;
+              for (let j = 0; j < positions.length; j++) {
+                centerX += positions[j].x;
+                centerY += positions[j].y;
+                centerZ += positions[j].z;
+              }
+              entity.position = new Cesium.Cartesian3(
+                centerX / positions.length,
+                centerY / positions.length,
+                centerZ / positions.length
+              );
+
+              // Create Calendar Table String
+              let labelText = `🕒 MÙA VỤ: ${producerName}\n====================\n`;
+              const calendarData = CROP_CALENDAR_DATA.ProducerName === producerName ? CROP_CALENDAR_DATA.CropCalendar : [];
+
+              // In a real app we would search the array properly, here mock data is simple object
+              // Assuming CROP_CALENDAR_DATA matches
+
+              if (calendarData && calendarData.length > 0) {
+                calendarData.forEach(stage => {
+                  labelText += `• ${stage.Stage}: ${stage.Start} -> ${stage.End}\n`;
+                });
+              }
+
+              entity.label = new Cesium.LabelGraphics({
+                text: labelText,
+                font: '16px monospace',
+                fillColor: Cesium.Color.YELLOW,
+                outlineColor: Cesium.Color.BLACK,
+                outlineWidth: 3,
+                showBackground: true,
+                backgroundColor: new Cesium.Color(0.2, 0.1, 0.0, 0.8),
+                style: Cesium.LabelStyle.FILL_AND_OUTLINE,
+                verticalOrigin: Cesium.VerticalOrigin.BOTTOM,
+                pixelOffset: new Cesium.Cartesian2(0, -20),
+                heightReference: Cesium.HeightReference.CLAMP_TO_GROUND,
+                disableDepthTestDistance: Number.POSITIVE_INFINITY
+              });
+            }
+          }
+          viewer.dataSources.add(dataSource);
+          viewer.zoomTo(dataSource);
+        }
+        else {
+          // Fallback
+          viewer.camera.flyTo({
+            destination: Cesium.Cartesian3.fromDegrees(106.699, 11.864, 2000),
+            duration: 1.5
+          });
+        }
+      } catch (error) {
+        console.error("Error loading data:", error);
+      }
+    };
+
+    updateVisualization();
+
+  }, [activeMode]);
 
   return (
     <div style={{ position: 'relative', width: '100%', height: '100%' }}>
       <div ref={cesiumContainer} className="cesium-viewer" />
-      <div className="control-panel">
-        <button onClick={toggleSceneMode}>
-          Toggle 2D/3D
-        </button>
-      </div>
+
+      {/* Control Panel */}
+      <ControlPanel onModeChange={setActiveMode} activeMode={activeMode} />
+
+      {/* Overlays - Removed in favor of 3D Map Labels
+      {activeMode === 'production' && <ProductionDashboard data={PRODUCTION_DATA} />}
+      {activeMode === 'calendar' && <CropCalendar data={CROP_CALENDAR_DATA} />}
+      */}
+
+      {/* Terrain Demo Panel */}
+      {activeMode === 'terrain' && <TerrainDemo viewer={viewerRef.current} />}
+
     </div>
   );
 }
