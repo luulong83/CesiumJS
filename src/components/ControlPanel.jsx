@@ -8,6 +8,8 @@ const ControlPanel = ({ onModeChange, activeMode }) => {
         { id: 'calendar', label: '🕒 Mùa Vụ', icon: '📅' },
         { id: 'terrain', label: '⛰️ Demo Địa Hình', icon: '🌍' },
         { id: 'fire', label: '🔥 Cảnh Báo Cháy', icon: '🚨' },
+        { id: 'flood', label: '🌊 Ngập Lụt 3D', icon: '💧' },
+        { id: 'example', label: '📐 Ví Dụ Polygon', icon: '🗺️' },
     ];
 
     return (

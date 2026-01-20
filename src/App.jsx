@@ -8,6 +8,8 @@ import ProductionDashboard from './components/ProductionDashboard';
 import CropCalendar from './components/CropCalendar';
 import TerrainDemo from './components/TerrainDemo';
 import FireRiskDemo from './components/FireRiskDemo';
+import PolygonLabelExample from './components/PolygonLabelExample';
+import FloodSimulationDemo from './components/FloodSimulationDemo';
 
 import {
   PLANTING_AREA_DATA,
@@ -342,6 +344,12 @@ function App() {
 
       {/* Fire Risk Demo Panel */}
       {activeMode === 'fire' && <FireRiskDemo viewer={viewerRef.current} />}
+
+      {/* Polygon Label Example Panel */}
+      {activeMode === 'example' && <PolygonLabelExample viewer={viewerRef.current} />}
+
+      {/* Flood Simulation Demo Panel */}
+      {activeMode === 'flood' && <FloodSimulationDemo viewer={viewerRef.current} />}
 
     </div>
   );
